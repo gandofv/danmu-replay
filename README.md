@@ -1,2 +1,40 @@
-# danmu-replay
-直播弹幕断线重连测试器 · WebSocket replay, lost acknowledgements and pytest
+# DanmuReplay · 弹幕重连测试器
+
+观众已经看到了第 05 条弹幕，确认消息却没发出去。这时断线重连，第 05 条会显示几次？
+
+这是一个可离线运行的单观众测试实验。Python 在本机随机端口启动 WebSocket 服务，pytest 分别检查每次连接收到的消息，以及观众最终看到的完整编号序列。服务端保存最后一个已确认编号，客户端按消息编号去重。
+
+| 场景 | 断线时机 | 重连时从哪条开始 |
+| --- | --- | --- |
+| normal | 全程在线 | 无需重连 |
+| offline | 服务端确认收到 05 的 ACK 后 | 06 |
+| lost-ack | 屏幕显示 05 后、客户端发送 ACK 前 | 05 |
+
+两种断线场景都会在旧连接关闭后发布 06 和 07。客户端逐条请求下一条消息，测试通过协议事件控制断点，无须猜测网络延迟。实验中的离线补发属于此模拟直播间的产品约定。
+
+## 本地运行
+
+在 Python 3.11 或更高版本的环境中执行：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pytest -q
+python replay.py lost-ack
+```
+
+## 复现重复弹幕
+
+```bash
+python replay.py lost-ack --no-dedup
+```
+
+这次客户端将所有收到的消息直接追加到显示列表。程序打印断线与补发时间线，以及下面的诊断，并以状态码 1 退出。开启去重时相同场景应以 0 退出。
+
+```text
+期望 10 条，实际显示 11 条
+弹幕 05 重复，位置 5、6
+```
+
+客户端用内存列表记录显示结果。这个实验覆盖同一客户端进程内的重连与消息顺序，不涉及浏览器渲染、进程重启或多观众负载。
